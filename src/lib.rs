@@ -2,6 +2,7 @@ use std::ptr::{self, NonNull};
 use std::marker::PhantomData;
 use std::cell::UnsafeCell;
 use std::rc::Rc;
+use std::ops::{Deref, DerefMut};
 
 pub struct Visitor {
     _not_pub_constructable: (),
@@ -208,24 +209,33 @@ impl<'s> IntoIterator for &'s mut Arena {
     }
 }
 
+// Note the use of associated methods because of Deref<Target=T>.
 impl<T: ?Sized> Gc<T> {
-    pub fn as_ref(&self) -> Option<&T> {
+    pub fn try_as_ref(this: &Self) -> Option<&T> {
         unsafe {
             // SAFETY: we're bounding the reference implicitly with the lifetime on self.
-            (*self.ptr.get()).inner.map(|pr| {
+            (*this.ptr.get()).inner.map(|pr| {
                 &pr.as_ref().value
             })
         }
     }
 
-    pub fn as_mut(&mut self) -> Option<&mut T> {
+    pub fn as_ref(this: &Self) -> &T {
+        Self::try_as_ref(this).expect("Gc::as_ref on collected object")
+    }
+
+    pub fn try_as_mut(this: &mut Self) -> Option<&mut T> {
         unsafe {
             // SAFETY: As above; note the mutable borrow of self to statically guarantee
             // uniqueness.
-            (*self.ptr.get()).inner.map(|mut pr| {
+            (*this.ptr.get()).inner.map(|mut pr| {
                 &mut pr.as_mut().value
             })
         }
+    }
+
+    pub fn as_mut(this: &mut Self) -> &mut T {
+        Self::try_as_mut(this).expect("Gc::as_mut on collected object")
     }
 }
 
@@ -264,6 +274,15 @@ impl<T> Clone for Gc<T> {
             marker: PhantomData,
         }
     }
+}
+
+impl<T> Deref for Gc<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target { Gc::as_ref(self) }
+}
+
+impl<T> DerefMut for Gc<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target { Gc::as_mut(self) }
 }
 
 impl<T: ?Sized> Sealed for GcBox<T> {}

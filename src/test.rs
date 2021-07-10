@@ -122,8 +122,8 @@ fn rooted_borrow_lives() {
     let col = arena.collect();
     assert_eq!(col.total, 1);
     assert_eq!(col.collected, 0);
-    assert_eq!(a.as_ref(), Some(&Object::Simple));
-    assert_eq!(a.as_mut(), Some(&mut Object::Simple));
+    assert_eq!(&*a, &Object::Simple);
+    assert_eq!(&mut *a, &mut Object::Simple);
 }
 
 #[test]
@@ -133,8 +133,8 @@ fn unrooted_borrow_dies() {
     let col = arena.collect();
     assert_eq!(col.total, 1);
     assert_eq!(col.collected, 1);
-    assert_eq!(a.as_ref(), None);
-    assert_eq!(a.as_mut(), None);
+    assert_eq!(Gc::try_as_ref(&a), None);
+    assert_eq!(Gc::try_as_mut(&mut a), None);
 }
 
 #[test]
@@ -144,14 +144,14 @@ fn borrow_dies_after_unroot() {
     let col = arena.collect();
     assert_eq!(col.total, 1);
     assert_eq!(col.collected, 0);
-    assert_eq!(a.as_ref(), Some(&Object::Simple));
-    assert_eq!(a.as_mut(), Some(&mut Object::Simple));
+    assert_eq!(&*a, &Object::Simple);
+    assert_eq!(&mut *a, &mut Object::Simple);
     arena.unroot(&a);
     let col = arena.collect();
     assert_eq!(col.total, 1);
     assert_eq!(col.collected, 1);
-    assert_eq!(a.as_ref(), None);
-    assert_eq!(a.as_mut(), None);
+    assert_eq!(Gc::try_as_ref(&a), None);
+    assert_eq!(Gc::try_as_mut(&mut a), None);
 }
 
 #[test]
@@ -162,14 +162,14 @@ fn iterative() {
         let col = arena.collect();
         assert_eq!(col.total, 1);
         assert_eq!(col.collected, 0);
-        assert_eq!(a.as_ref(), Some(&Object::Simple));
-        assert_eq!(a.as_mut(), Some(&mut Object::Simple));
+        assert_eq!(&*a, &Object::Simple);
+        assert_eq!(&mut *a, &mut Object::Simple);
         arena.unroot(&a);
         let col = arena.collect();
         assert_eq!(col.total, 1);
         assert_eq!(col.collected, 1);
-        assert_eq!(a.as_ref(), None);
-        assert_eq!(a.as_mut(), None);
+        assert_eq!(Gc::try_as_ref(&a), None);
+        assert_eq!(Gc::try_as_mut(&mut a), None);
     }
 }
 
@@ -209,3 +209,55 @@ fn roots_outlive_refs() {
         assert_eq!(arena.iter().count(), total);
     }
 }
+
+// More of a compilation test than anything, but...
+#[test]
+fn ergonomic_matching() {
+    let mut arena = Arena::new();
+    let a = arena.root(Object::Simple);
+    let b = arena.root(Object::Container(Vec::new()));
+    let c = |x: Gc<Object>| {
+        match &*x {
+            Object::Simple => println!("simple object"),
+            Object::Container(_) => println!("container"),
+            _ => println!("something else"),
+        }
+    };
+    c(a);
+    c(b);
+}
+
+macro_rules! panic_template {
+    ($test:ident, $object:ident, $code:block) => {
+        #[test]
+        #[should_panic(expected = "on collected object")]
+        fn $test() {
+            let mut arena = Arena::new();
+            #[allow(unused_mut)]
+            let mut $object = arena.gc(Object::Simple);  // Oops! Forgot to root it!
+            arena.collect();  // Bad things here...
+            $code;
+        }
+    };
+}
+
+panic_template!(
+    panic_on_collected_deref,
+    a,
+    { println!("{:?}", &*a); }
+);
+panic_template!(
+    panic_on_collected_deref_mut,
+    a,
+    { println!("{:?}", &mut *a); }
+);
+panic_template!(
+    panic_on_collected_as_ref,
+    a,
+    { println!("{:?}", Gc::as_ref(&a)); }
+);
+panic_template!(
+    panic_on_collected_as_mut,
+    a,
+    { println!("{:?}", Gc::as_mut(&mut a)); }
+);
