@@ -117,6 +117,22 @@ impl Arena {
         gc
     }
 
+    pub fn make_root<T: 'static>(&mut self, gc: &Gc<T>) {
+        let inner = unsafe {
+            // SAFETY: as above, this is mostly because we're using an UnsafeCell. No ref is coined
+            // here, so we're not making any promises about lifetimes we can't keep.
+            (*gc.ptr.get()).inner
+        };
+        // FIXME: this is still slow
+        if let Some(inner) = inner {  // NB the shadow
+            if ! self.roots.iter().any(|p| {
+                std::ptr::eq(p.as_ptr(), inner.as_ptr())
+            }) {  // Avoid duplicates in the roots
+                self.roots.push(inner);
+            }
+        }
+    }
+
     pub fn unroot<T>(&mut self, gc: &Gc<T>) {
         // FIXME: This is expected to be a cold path
         self.roots = self.roots.iter().cloned()

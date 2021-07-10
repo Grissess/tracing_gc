@@ -261,3 +261,46 @@ panic_template!(
     a,
     { println!("{:?}", Gc::as_mut(&mut a)); }
 );
+
+#[test]
+fn later_make_root_saves() {
+    let mut arena = Arena::new();
+    let a = arena.gc(Object::Simple);
+    // later...
+    arena.make_root(&a);
+    let col = arena.collect();
+    assert_eq!(col.total, 1);
+    assert_eq!(col.collected, 0);
+    assert_eq!(&*a, &Object::Simple);
+}
+
+#[test]
+fn unroot_undoes_make_root() {
+    let mut arena = Arena::new();
+    let a = arena.gc(Object::Simple);
+    arena.make_root(&a);
+    let col = arena.collect();
+    assert_eq!(col.total, 1);
+    assert_eq!(col.collected, 0);
+    arena.unroot(&a);
+    let col = arena.collect();
+    assert_eq!(col.total, 1);
+    assert_eq!(col.collected, 1);
+    assert_eq!(Gc::try_as_ref(&a), None);
+}
+
+#[test]
+fn multiple_make_roots_are_idempotent() {
+    let mut arena = Arena::new();
+    let a = arena.gc(Object::Simple);
+    for i in 0..5 {
+        arena.make_root(&a);
+    }
+    let col = arena.collect();
+    assert_eq!(col.total, 1);
+    assert_eq!(col.collected, 0);
+    arena.unroot(&a);
+    let col = arena.collect();
+    assert_eq!(col.total, 1);
+    assert_eq!(col.collected, 1);
+}
