@@ -304,3 +304,15 @@ fn multiple_make_roots_are_idempotent() {
     assert_eq!(col.total, 1);
     assert_eq!(col.collected, 1);
 }
+
+#[test]
+fn same_alloc() {
+    let mut arena = Arena::new();
+    let a = arena.root(Object::Simple);
+    let b = a.clone();
+    let c = arena.root(Object::Simple);
+    assert!(Gc::ptr_eq(&a, &b));
+    assert!(Gc::ptr_eq(&b, &a));
+    assert!(!Gc::ptr_eq(&a, &c));
+    assert!(!Gc::ptr_eq(&b, &c));
+}

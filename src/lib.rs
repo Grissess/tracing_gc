@@ -253,6 +253,10 @@ impl<T: ?Sized> Gc<T> {
     pub fn as_mut(this: &mut Self) -> &mut T {
         Self::try_as_mut(this).expect("Gc::as_mut on collected object")
     }
+
+    pub fn ptr_eq(this: &Self, other: &Self) -> bool {
+        Rc::ptr_eq(&this.ptr, &other.ptr)
+    }
 }
 
 impl<T: Trace> Gc<T> {
